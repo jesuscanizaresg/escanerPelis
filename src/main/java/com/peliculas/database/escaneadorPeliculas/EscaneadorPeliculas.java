@@ -1,14 +1,17 @@
 package com.peliculas.database.escaneadorPeliculas;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -18,8 +21,10 @@ import java.util.Locale;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @SpringBootApplication
+@Slf4j
 public class EscaneadorPeliculas {
 
     private static final boolean borrarBaseDatos = false;
@@ -33,13 +38,13 @@ public class EscaneadorPeliculas {
         application.setWebApplicationType(WebApplicationType.NONE);
         ConfigurableApplicationContext context = application.run(args);
 
-        System.out.println("Inicio de escaneo de peliculas.");
+        log.info("Inicio de escaneo de peliculas.");
 
         borrarInformeDuplicados();
 
         DriveOption unidadSeleccionada = solicitarUnidadParaEscaneo();
         if (unidadSeleccionada == null) {
-            System.out.println("No se selecciono ninguna unidad. Proceso cancelado.");
+            log.info("No se selecciono ninguna unidad. Proceso cancelado.");
             SpringApplication.exit(context, () -> 0);
             return;
         }
@@ -50,7 +55,7 @@ public class EscaneadorPeliculas {
 
         if (borrarBaseDatos) {
             DatabaseManager.borrarBaseDatos();
-            System.out.println("Base de datos borrada.");
+            log.info("Base de datos borrada.");
         }
 
         DatabaseManager.createOrUpdateTable();
@@ -72,20 +77,19 @@ public class EscaneadorPeliculas {
     }
 
     private static void borrarInformeDuplicados() {
-        try {
-            Files.walk(Paths.get(directorioInformes))
-                    .filter(Files::isRegularFile)
+        try (Stream<Path> archivos = Files.walk(Paths.get(directorioInformes))) {
+            archivos.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().startsWith("InformeDuplicados_"))
                     .forEach(path -> {
                         try {
                             Files.delete(path);
-                            System.out.println("Informe de duplicados eliminado: " + path.getFileName());
+                            log.info("Informe de duplicados eliminado: {}", path.getFileName());
                         } catch (IOException e) {
-                            System.out.println("No se pudo eliminar el informe de duplicados: " + path.getFileName());
+                            log.warn("No se pudo eliminar el informe de duplicados: {}", path.getFileName(), e);
                         }
                     });
         } catch (IOException e) {
-            System.out.println("Error al buscar archivos de informe de duplicados: " + e.getMessage());
+            log.error("Error al buscar archivos de informe de duplicados", e);
         }
     }
 
@@ -122,7 +126,7 @@ public class EscaneadorPeliculas {
             try {
                 return Integer.parseInt(matcher.group(1));
             } catch (NumberFormatException e) {
-                System.err.println("Error al convertir el anio a entero: " + e.getMessage());
+                log.error("Error al convertir el anio a entero", e);
             }
         }
         return 0;
@@ -155,23 +159,23 @@ public class EscaneadorPeliculas {
         String nombreInforme = "InformeDuplicados_" + fechaHora + ".txt";
         File informe = new File(nombreInforme);
 
-        try (FileWriter writer = new FileWriter(informe)) {
+        try (BufferedWriter writer = Files.newBufferedWriter(informe.toPath(), StandardCharsets.UTF_8)) {
             writer.write("Fecha y hora de ejecucion: " + fechaHoraEjecucion + "\n\n");
             writer.write("Archivos duplicados:\n");
             for (DuplicateEntry duplicado : duplicados) {
                 writer.write("- " + duplicado.titulo() + " (" + duplicado.anio() + ") [" + duplicado.version() + "] "
                         + duplicado.ruta() + " -> " + duplicado.motivo() + "\n");
             }
-            System.out.println("Informe de duplicados generado: " + nombreInforme);
+            log.info("Informe de duplicados generado: {}", nombreInforme);
         } catch (IOException e) {
-            System.out.println("Error al generar el informe de duplicados: " + e.getMessage());
+            log.error("Error al generar el informe de duplicados", e);
         }
     }
 
     private static DriveOption solicitarUnidadParaEscaneo() {
         List<DriveOption> unidades = listarUnidades();
         if (unidades.isEmpty()) {
-            System.out.println("No se encontraron unidades para escanear.");
+            log.info("No se encontraron unidades para escanear.");
             return null;
         }
 
@@ -238,7 +242,7 @@ public class EscaneadorPeliculas {
 
     private static String solicitarNombreBaseDatos(String nombrePorDefecto) {
         System.out.println("Base de datos por defecto: " + nombrePorDefecto);
-        System.out.print("Pulse Enter para usarla o escriba otro nombre: ");
+        System.out.println("Pulse Enter para usarla o escriba otro nombre: ");
         String entrada = CONSOLE.nextLine();
         if (entrada == null || entrada.trim().isEmpty()) {
             return nombrePorDefecto;
