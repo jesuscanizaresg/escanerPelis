@@ -95,6 +95,7 @@ public class EscaneadorPeliculas {
 
     public static void procesarPelicula(File archivo) {
         String nombreArchivo = archivo.getName();
+        String tituloBase = obtenerTituloBase(archivo);
         String fechaModificacion = obtenerFechaModificacion(archivo);
         String extension = obtenerExtension(archivo);
         long tamano = archivo.length();
@@ -102,12 +103,12 @@ public class EscaneadorPeliculas {
         String version = obtenerVersion(archivo);
         String origen = rutaRaizSeleccionada;
 
-        if (DatabaseManager.existePeliculaPorTitulo(nombreArchivo)) {
-            registrarDuplicado(nombreArchivo, anio, version, origen);
+        if (DatabaseManager.existePeliculaPorTituloBase(tituloBase)) {
+            registrarDuplicado(nombreArchivo, anio, version, extension, origen);
             return;
         }
 
-        DatabaseManager.insertarPelicula(nombreArchivo, anio, version, extension, tamano, fechaModificacion, origen);
+        DatabaseManager.insertarPelicula(nombreArchivo, tituloBase, anio, version, extension, tamano, fechaModificacion, origen);
     }
 
     private static String obtenerFechaModificacion(File archivo) {
@@ -142,6 +143,15 @@ public class EscaneadorPeliculas {
         return "";
     }
 
+    private static String obtenerTituloBase(File archivo) {
+        String nombreArchivo = archivo.getName();
+        int puntoIndex = nombreArchivo.lastIndexOf('.');
+        if (puntoIndex > 0) {
+            return nombreArchivo.substring(0, puntoIndex);
+        }
+        return nombreArchivo;
+    }
+
     private static String obtenerExtension(File archivo) {
         String nombreArchivo = archivo.getName();
         int puntoIndex = nombreArchivo.lastIndexOf('.');
@@ -163,8 +173,8 @@ public class EscaneadorPeliculas {
             writer.write("Fecha y hora de ejecucion: " + fechaHoraEjecucion + "\n\n");
             writer.write("Archivos duplicados:\n");
             for (DuplicateEntry duplicado : duplicados) {
-                writer.write("- " + duplicado.titulo() + " (" + duplicado.anio() + ") [" + duplicado.version() + "] "
-                        + duplicado.ruta() + " -> " + duplicado.motivo() + "\n");
+                writer.write("- " + duplicado.titulo() + " (" + duplicado.anio() + ") [" + duplicado.version() + "] ."
+                        + duplicado.extension() + " " + duplicado.ruta() + " -> " + duplicado.motivo() + "\n");
             }
             log.info("Informe de duplicados generado: {}", nombreInforme);
         } catch (IOException e) {
@@ -236,8 +246,8 @@ public class EscaneadorPeliculas {
         return null;
     }
 
-    private static void registrarDuplicado(String titulo, int anio, String version, String ruta) {
-        archivosDuplicados.add(new DuplicateEntry(titulo, anio, version, ruta, "Titulo ya registrado"));
+    private static void registrarDuplicado(String titulo, int anio, String version, String extension, String ruta) {
+        archivosDuplicados.add(new DuplicateEntry(titulo, anio, version, extension, ruta, "Titulo base ya registrado"));
     }
 
     private static String solicitarNombreBaseDatos(String nombrePorDefecto) {
@@ -256,6 +266,6 @@ public class EscaneadorPeliculas {
         }
     }
 
-    private record DuplicateEntry(String titulo, int anio, String version, String ruta, String motivo) {
+    private record DuplicateEntry(String titulo, int anio, String version, String extension, String ruta, String motivo) {
     }
 }
